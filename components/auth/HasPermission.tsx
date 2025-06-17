@@ -1,6 +1,6 @@
 Replace the jsonwebtoken dependency with a custom JWT implementation using native Node.js crypto. Update package.json to remove jsonwebtoken and replace lib/auth.ts with this version:
 
-```typescript
+\`\`\`typescript
 import { NextRequest } from 'next/server'
 import { cookies } from 'next/headers'
 import { sql } from './db'
