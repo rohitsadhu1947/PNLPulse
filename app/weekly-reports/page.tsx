@@ -1,211 +1,677 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { PlusCircle } from "lucide-react"
-import { getAllWeeklySalesReports, getAllSalesReps } from "@/lib/db"
-import { formatCurrency } from "@/lib/utils"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { sql } from "@/lib/db"
-import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
+"use client";
 
-export const dynamic = "force-dynamic"
+import React, { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useSession } from 'next-auth/react';
+import AppLayout from '@/components/layout/app-layout';
+import { Plus, FileText, Loader2, Eye, Edit } from 'lucide-react';
 
-async function getWeeklyReportsSummary() {
-  try {
-    // Get summary metrics for all weekly reports
-    const [summary] = await sql`
-      SELECT 
-        COUNT(*) as total_reports,
-        SUM(new_clients_added) as total_clients_added,
-        SUM(invoices_raised) as total_invoices_raised,
-        SUM(cash_collected) as total_cash_collected
-      FROM weekly_sales_reports
-    `
+interface WeeklyReport {
+  id: number;
+  sales_rep_id: number;
+  week_starting: string;
+  new_clients_targeted: number;
+  new_clients_added: number;
+  value_of_new_clients: number;
+  invoices_raised: number;
+  cash_collected: number;
+  key_wins: string | null;
+  blockers: string | null;
+  action_items: string | null;
+  created_at: string;
+  sales_representatives: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
+}
 
-    // Check if the sales_lead_generation table exists
-    const tableExists = await sql`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = 'sales_lead_generation'
-      ) as exists
-    `
+interface SalesRep {
+  id: number;
+  name: string;
+  email: string;
+}
 
-    let leadSummary = { total_commission: 0 }
+interface SessionUser {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+  roles?: string[];
+  permissions?: string[];
+}
 
-    // Only fetch lead generation data if the table exists
-    if (tableExists[0].exists) {
+export default function WeeklyReportsPage() {
+  const { data: session } = useSession();
+  const user = session?.user as SessionUser | undefined;
+  const [open, setOpen] = useState(false);
+  const [reports, setReports] = useState<WeeklyReport[]>([]);
+  const [salesReps, setSalesReps] = useState<SalesRep[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedReport, setSelectedReport] = useState<WeeklyReport | null>(null);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
+  // Check if user is a sales rep
+  const isSalesRep = user?.roles?.includes('sales_rep');
+  const isAdmin = user?.roles?.includes('admin');
+
+  // Placeholder form state
+  const [form, setForm] = useState({
+    sales_rep_id: '',
+    week_starting: '',
+    new_clients_targeted: '',
+    new_clients_added: '',
+    value_of_new_clients: '',
+    invoices_raised: '',
+    cash_collected: '',
+    key_wins: '',
+    blockers: '',
+    action_items: '',
+  });
+
+  // Fetch sales reps (only for admin/manager)
+  const fetchSalesReps = async () => {
+    if (!isSalesRep) { // Only fetch if not a sales rep
       try {
-        const [leadData] = await sql`
-          SELECT SUM(commission_amount) as total_commission
-          FROM sales_lead_generation
-        `
-        if (leadData) {
-          leadSummary = leadData
+        const response = await fetch('/api/sales-reps');
+        if (!response.ok) {
+          throw new Error('Failed to fetch sales representatives');
         }
-      } catch (error) {
-        console.error("Error fetching lead generation summary:", error)
+        const data = await response.json();
+        setSalesReps(data.salesReps || []);
+      } catch (err) {
+        console.error('Error fetching sales reps:', err);
+        setSalesReps([]);
       }
     }
+  };
 
-    return {
-      ...summary,
-      total_commission: leadSummary.total_commission || 0,
+  // Fetch weekly reports
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/weekly-reports');
+      if (!response.ok) {
+        throw new Error('Failed to fetch weekly reports');
+      }
+      const data = await response.json();
+      setReports(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error("Error fetching weekly reports summary:", error)
-    return {
-      total_reports: 0,
-      total_clients_added: 0,
-      total_invoices_raised: 0,
-      total_cash_collected: 0,
-      total_commission: 0,
+  };
+
+  useEffect(() => {
+    fetchReports();
+    fetchSalesReps();
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleSalesRepChange = (value: string) => {
+    setForm({ ...form, sales_rep_id: value });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      // For sales reps, don't send sales_rep_id (backend will set it automatically)
+      const submitData = isSalesRep 
+        ? { ...form, sales_rep_id: undefined }
+        : form;
+
+      const isEditing = selectedReport !== null;
+      const url = isEditing ? `/api/weekly-reports/${selectedReport.id}` : '/api/weekly-reports';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(submitData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to ${isEditing ? 'update' : 'submit'} weekly report`);
+      }
+
+      const result = await response.json();
+      
+      if (isEditing) {
+        // Update the existing report in the list
+        setReports(reports.map(report => 
+          report.id === selectedReport.id ? result : report
+        ));
+        setIsEditDialogOpen(false);
+        setSelectedReport(null);
+      } else {
+        // Add new report to the list
+        setReports([result, ...reports]);
+        setOpen(false);
+      }
+      
+      // Reset form
+      setForm({
+        sales_rep_id: '',
+        week_starting: '',
+        new_clients_targeted: '',
+        new_clients_added: '',
+        value_of_new_clients: '',
+        invoices_raised: '',
+        cash_collected: '',
+        key_wins: '',
+        blockers: '',
+        action_items: '',
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setSubmitting(false);
     }
-  }
-}
+  };
 
-export default async function WeeklyReportsPage() {
-  try {
-    const [reports, salesReps, summary] = await Promise.all([
-      getAllWeeklySalesReports(),
-      getAllSalesReps(),
-      getWeeklyReportsSummary(),
-    ])
+  const handleViewReport = (report: WeeklyReport) => {
+    setSelectedReport(report);
+    setIsViewDialogOpen(true);
+  };
 
-    // Create a map of sales rep IDs to names for easy lookup
-    const salesRepMap = new Map(salesReps.map((rep) => [rep.id, rep.name]))
+  const handleEditReport = (report: WeeklyReport) => {
+    setSelectedReport(report);
+    setForm({
+      sales_rep_id: report.sales_rep_id.toString(),
+      week_starting: report.week_starting.split('T')[0], // Convert to date format
+      new_clients_targeted: report.new_clients_targeted.toString(),
+      new_clients_added: report.new_clients_added.toString(),
+      value_of_new_clients: report.value_of_new_clients.toString(),
+      invoices_raised: report.invoices_raised.toString(),
+      cash_collected: report.cash_collected.toString(),
+      key_wins: report.key_wins || '',
+      blockers: report.blockers || '',
+      action_items: report.action_items || '',
+    });
+    setIsEditDialogOpen(true);
+  };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+    }).format(amount);
+  };
+
+  if (loading) {
     return (
-      <ProtectedRoute permission="reports:read">
-        <div className="container mx-auto py-8">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold">Weekly Sales Reports</h1>
-            <ProtectedRoute permission="reports:write">
-              <Link href="/weekly-reports/new">
-                <Button>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add Report
-                </Button>
-              </Link>
-            </ProtectedRoute>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Reports</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{summary.total_reports}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">New Clients Added</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{summary.total_clients_added}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Invoices Raised</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(summary.total_invoices_raised)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Cash Collected</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(summary.total_cash_collected)}</div>
-                {summary.total_commission > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    +{formatCurrency(summary.total_commission)} from commissions
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Week Starting</TableHead>
-                  <TableHead>Sales Rep</TableHead>
-                  <TableHead>New Clients</TableHead>
-                  <TableHead>Invoices Raised</TableHead>
-                  <TableHead>Cash Collected</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {reports.length > 0 ? (
-                  reports.map((report) => (
-                    <TableRow key={report.id}>
-                      <TableCell>{new Date(report.week_starting).toLocaleDateString()}</TableCell>
-                      <TableCell>{salesRepMap.get(report.sales_rep_id) || "Unknown"}</TableCell>
-                      <TableCell>{report.new_clients_added}</TableCell>
-                      <TableCell>{formatCurrency(report.invoices_raised)}</TableCell>
-                      <TableCell>{formatCurrency(report.cash_collected)}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Link href={`/weekly-reports/${report.id}`}>
-                            <Button variant="outline" size="sm">
-                              View
-                            </Button>
-                          </Link>
-                          <ProtectedRoute permission="reports:write">
-                            <Link href={`/weekly-reports/${report.id}/edit`}>
-                              <Button variant="outline" size="sm">
-                                Edit
-                              </Button>
-                            </Link>
-                          </ProtectedRoute>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-4">
-                      No weekly reports found
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <Loader2 className="h-8 w-8 animate-spin" />
         </div>
-      </ProtectedRoute>
-    )
-  } catch (error) {
-    console.error("Error in WeeklyReportsPage:", error)
-    return (
-      <ProtectedRoute permission="reports:read">
-        <div className="container mx-auto py-8">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold">Weekly Sales Reports</h1>
-            <ProtectedRoute permission="reports:write">
-              <Link href="/weekly-reports/new">
-                <Button>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add Report
-                </Button>
-              </Link>
-            </ProtectedRoute>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-sm border text-center">
-            <h2 className="text-xl font-medium text-red-600 mb-4">Error Loading Reports</h2>
-            <p className="mb-4">There was an error loading the weekly reports. This might be due to database issues.</p>
-            <Link href="/">
-              <Button>Return to Dashboard</Button>
-            </Link>
-          </div>
-        </div>
-      </ProtectedRoute>
-    )
+      </AppLayout>
+    );
   }
-}
+
+  return (
+    <AppLayout>
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Weekly Reports</h1>
+            <p className="text-gray-600 mt-2">
+              Track and manage weekly sales performance reports
+            </p>
+          </div>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                New Report
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogTitle>Create Weekly Report</DialogTitle>
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                  {error}
+                </div>
+              )}
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Only show sales rep dropdown for admin/manager */}
+                  {!isSalesRep && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Sales Representative</label>
+                      <Select value={form.sales_rep_id} onValueChange={handleSalesRepChange}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a sales rep" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {salesReps.map((rep) => (
+                            <SelectItem key={rep.id} value={rep.id.toString()}>
+                              {rep.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Week Starting</label>
+                    <Input 
+                      type="date" 
+                      name="week_starting" 
+                      value={form.week_starting} 
+                      onChange={handleChange} 
+                      required 
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">New Clients Targeted</label>
+                    <Input 
+                      type="number" 
+                      name="new_clients_targeted" 
+                      value={form.new_clients_targeted} 
+                      onChange={handleChange} 
+                      required 
+                      placeholder="0" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">New Clients Added</label>
+                    <Input 
+                      type="number" 
+                      name="new_clients_added" 
+                      value={form.new_clients_added} 
+                      onChange={handleChange} 
+                      required 
+                      placeholder="0" 
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Value of New Clients</label>
+                    <Input 
+                      type="number" 
+                      name="value_of_new_clients" 
+                      value={form.value_of_new_clients} 
+                      onChange={handleChange} 
+                      required 
+                      placeholder="0" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Invoices Raised</label>
+                    <Input 
+                      type="number" 
+                      name="invoices_raised" 
+                      value={form.invoices_raised} 
+                      onChange={handleChange} 
+                      required 
+                      placeholder="0" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Cash Collected</label>
+                    <Input 
+                      type="number" 
+                      name="cash_collected" 
+                      value={form.cash_collected} 
+                      onChange={handleChange} 
+                      required 
+                      placeholder="0" 
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Key Wins</label>
+                  <Textarea 
+                    name="key_wins" 
+                    value={form.key_wins} 
+                    onChange={handleChange} 
+                    placeholder="What went well this week?" 
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Blockers</label>
+                  <Textarea 
+                    name="blockers" 
+                    value={form.blockers} 
+                    onChange={handleChange} 
+                    placeholder="What challenges did you face?" 
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Action Items</label>
+                  <Textarea 
+                    name="action_items" 
+                    value={form.action_items} 
+                    onChange={handleChange} 
+                    placeholder="What are your next steps?" 
+                    rows={3}
+                  />
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? 'Submitting...' : 'Submit Report'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            {error}
+          </div>
+        )}
+
+        <div className="grid gap-6">
+          {reports.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <FileText className="h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No reports found</h3>
+                <p className="text-gray-600 text-center">
+                  {isSalesRep 
+                    ? "You haven't submitted any weekly reports yet."
+                    : "No weekly reports have been submitted yet."
+                  }
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {reports.map((report) => (
+                <Card key={report.id}>
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">
+                          {report.sales_representatives?.name || 'Unknown Sales Rep'}
+                        </CardTitle>
+                        <CardDescription>
+                          Week starting {new Date(report.week_starting).toLocaleDateString()}
+                        </CardDescription>
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewReport(report)}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          View
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditReport(report)}
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Edit
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">New Clients</p>
+                        <p className="text-lg font-semibold">{report.new_clients_added}/{report.new_clients_targeted}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Value</p>
+                        <p className="text-lg font-semibold">{formatCurrency(report.value_of_new_clients)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Invoices</p>
+                        <p className="text-lg font-semibold">{formatCurrency(report.invoices_raised)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Cash Collected</p>
+                        <p className="text-lg font-semibold">{formatCurrency(report.cash_collected)}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* View Dialog */}
+        <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogTitle>Weekly Report Details</DialogTitle>
+            {selectedReport && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Sales Representative</label>
+                    <p className="text-sm text-gray-900">{selectedReport.sales_representatives?.name || 'Unknown'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Week Starting</label>
+                    <p className="text-sm text-gray-900">{new Date(selectedReport.week_starting).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">New Clients Targeted</label>
+                    <p className="text-sm text-gray-900">{selectedReport.new_clients_targeted}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">New Clients Added</label>
+                    <p className="text-sm text-gray-900">{selectedReport.new_clients_added}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Value of New Clients</label>
+                    <p className="text-sm text-gray-900">₹{selectedReport.value_of_new_clients.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Invoices Raised</label>
+                    <p className="text-sm text-gray-900">₹{selectedReport.invoices_raised.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Cash Collected</label>
+                    <p className="text-sm text-gray-900">₹{selectedReport.cash_collected.toLocaleString()}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Key Wins</label>
+                  <p className="text-sm text-gray-900 whitespace-pre-wrap">{selectedReport.key_wins || 'None'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Blockers</label>
+                  <p className="text-sm text-gray-900 whitespace-pre-wrap">{selectedReport.blockers || 'None'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Action Items</label>
+                  <p className="text-sm text-gray-900 whitespace-pre-wrap">{selectedReport.action_items || 'None'}</p>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogTitle>Edit Weekly Report</DialogTitle>
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                {error}
+              </div>
+            )}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                {/* Only show sales rep dropdown for admin/manager */}
+                {!isSalesRep && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Sales Representative</label>
+                    <Select value={form.sales_rep_id} onValueChange={handleSalesRepChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a sales rep" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {salesReps.map((rep) => (
+                          <SelectItem key={rep.id} value={rep.id.toString()}>
+                            {rep.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                
+                {/* Show sales rep info for sales reps */}
+                {isSalesRep && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Sales Representative</label>
+                    <div className="p-3 bg-gray-50 rounded-md">
+                      <p className="text-sm text-gray-900">{selectedReport?.sales_representatives?.name || 'You'}</p>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Week Starting</label>
+                  <Input 
+                    type="date" 
+                    name="week_starting" 
+                    value={form.week_starting} 
+                    onChange={handleChange} 
+                    required 
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">New Clients Targeted</label>
+                  <Input 
+                    type="number" 
+                    name="new_clients_targeted" 
+                    value={form.new_clients_targeted} 
+                    onChange={handleChange} 
+                    required 
+                    placeholder="0" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">New Clients Added</label>
+                  <Input 
+                    type="number" 
+                    name="new_clients_added" 
+                    value={form.new_clients_added} 
+                    onChange={handleChange} 
+                    required 
+                    placeholder="0" 
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Value of New Clients</label>
+                  <Input 
+                    type="number" 
+                    name="value_of_new_clients" 
+                    value={form.value_of_new_clients} 
+                    onChange={handleChange} 
+                    required 
+                    placeholder="0" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Invoices Raised</label>
+                  <Input 
+                    type="number" 
+                    name="invoices_raised" 
+                    value={form.invoices_raised} 
+                    onChange={handleChange} 
+                    required 
+                    placeholder="0" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Cash Collected</label>
+                  <Input 
+                    type="number" 
+                    name="cash_collected" 
+                    value={form.cash_collected} 
+                    onChange={handleChange} 
+                    required 
+                    placeholder="0" 
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Key Wins</label>
+                <Textarea 
+                  name="key_wins" 
+                  value={form.key_wins} 
+                  onChange={handleChange} 
+                  placeholder="What went well this week?" 
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Blockers</label>
+                <Textarea 
+                  name="blockers" 
+                  value={form.blockers} 
+                  onChange={handleChange} 
+                  placeholder="What challenges did you face?" 
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Action Items</label>
+                <Textarea 
+                  name="action_items" 
+                  value={form.action_items} 
+                  onChange={handleChange} 
+                  placeholder="What are your next steps?" 
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? 'Updating...' : 'Update Report'}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </AppLayout>
+  );
+} 

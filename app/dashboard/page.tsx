@@ -1,250 +1,343 @@
-import Link from "next/link"
-import { sql } from "@/lib/db"
-import { formatCurrency } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+"use client";
+import { useSession } from "next-auth/react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import AppLayout from "@/components/layout/app-layout";
+import { useSessionData } from "@/hooks/use-session-data";
+import { 
+  Users, 
+  DollarSign, 
+  TrendingUp, 
+  Target,
+  Plus,
+  FileText,
+  BarChart3,
+  Loader2,
+  TrendingDown
+} from "lucide-react";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
+import { Line, Bar } from 'react-chartjs-2';
+import { formatCurrency, formatCurrencyCompact } from "@/lib/utils"
 
-async function getTopSalesReps() {
-  try {
-    const result = await sql`
-      SELECT 
-        sr.id, 
-        sr.name, 
-        SUM(wsr.cash_collected) as total_cash_collected
-      FROM 
-        sales_representatives sr
-      JOIN 
-        weekly_sales_reports wsr ON sr.id = wsr.sales_rep_id
-      GROUP BY 
-        sr.id, sr.name
-      ORDER BY 
-        total_cash_collected DESC
-      LIMIT 5
-    `
-    return result
-  } catch (error) {
-    console.error("Error fetching top sales reps:", error)
-    return []
-  }
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
+
+interface DashboardData {
+  metrics: {
+    totalRevenue: number;
+    totalInvoices: number;
+    totalCashCollected: number;
+    activeClients: number;
+    totalLeads: number;
+    salesTarget: number;
+    revenueChange: number;
+  };
+  salesPerformance: Array<{
+    date: string;
+    revenue: number;
+    invoices: number;
+    cashCollected: number;
+  }>;
+  recentActivity: Array<{
+    id: number;
+    type: string;
+    description: string;
+    amount: number;
+    date: string;
+    salesRep: string;
+  }>;
 }
 
-async function getTopProducts() {
-  try {
-    const result = await sql`
-      SELECT 
-        p.id, 
-        p.name, 
-        SUM(srp.units_sold) as total_units_sold,
-        SUM(srp.revenue_generated) as total_revenue
-      FROM 
-        products p
-      JOIN 
-        sales_rep_products srp ON p.id = srp.product_id
-      GROUP BY 
-        p.id, p.name
-      ORDER BY 
-        total_revenue DESC
-      LIMIT 5
-    `
-    return result
-  } catch (error) {
-    console.error("Error fetching top products:", error)
-    return []
-  }
+interface SessionUser {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+  roles?: string[];
+  permissions?: string[];
 }
 
-async function getTopLeadGenerators() {
-  try {
-    // Check if the sales_lead_generation table exists
-    const tableExistsResult = await sql`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' AND table_name = 'sales_lead_generation'
-      ) as exists
-    `
+export default function DashboardPage() {
+  const { data: session } = useSession();
+  const user = session?.user as SessionUser | undefined;
+  
+  const { data: dashboardData, loading, error } = useSessionData<DashboardData>({
+    endpoint: '/api/dashboard'
+  });
 
-    const tableExists = tableExistsResult[0]?.exists || false
-
-    if (!tableExists) {
-      return []
-    }
-
-    const result = await sql`
-      SELECT 
-        sr.id, 
-        sr.name, 
-        SUM(slg.leads_generated) as total_leads_generated,
-        SUM(slg.leads_converted) as total_leads_converted,
-        SUM(slg.value_of_converted_leads * slg.commission_percentage / 100) as total_commission
-      FROM 
-        sales_representatives sr
-      JOIN 
-        sales_lead_generation slg ON sr.id = slg.generator_id
-      GROUP BY 
-        sr.id, sr.name
-      ORDER BY 
-        total_commission DESC
-      LIMIT 5
-    `
-    return result
-  } catch (error) {
-    console.error("Error fetching top lead generators:", error)
-    return []
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 2,
+    }).format(amount)
   }
-}
 
-async function getRecentWeeklyReports() {
-  try {
-    const result = await sql`
-      SELECT 
-        wsr.id, 
-        wsr.week_starting, 
-        sr.name as sales_rep_name,
-        wsr.cash_collected,
-        wsr.invoices_raised
-      FROM 
-        weekly_sales_reports wsr
-      JOIN 
-        sales_representatives sr ON wsr.sales_rep_id = sr.id
-      ORDER BY 
-        wsr.week_starting DESC
-      LIMIT 5
-    `
-    return result
-  } catch (error) {
-    console.error("Error fetching recent weekly reports:", error)
-    return []
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  const formatPercentage = (value: number) => {
+    return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+  };
+
+  const formatChartValue = (value: number) => {
+    return '₹' + value.toLocaleString();
   }
-}
 
-export default async function DashboardPage() {
-  const [topSalesReps, topProducts, topLeadGenerators, recentWeeklyReports] = await Promise.all([
-    getTopSalesReps(),
-    getTopProducts(),
-    getTopLeadGenerators(),
-    getRecentWeeklyReports(),
-  ])
+  const metrics = dashboardData ? [
+    {
+      title: "Total Revenue",
+      value: formatCurrency(dashboardData.metrics.totalRevenue),
+      change: formatPercentage(dashboardData.metrics.revenueChange),
+      changeType: dashboardData.metrics.revenueChange >= 0 ? "positive" : "negative",
+      icon: DollarSign,
+    },
+    {
+      title: "Total Invoices",
+      value: formatCurrency(dashboardData.metrics.totalInvoices),
+      change: "N/A",
+      changeType: "neutral",
+      icon: FileText,
+    },
+    {
+      title: "Cash Collected",
+      value: formatCurrency(dashboardData.metrics.totalCashCollected),
+      change: "N/A",
+      changeType: "neutral",
+      icon: TrendingUp,
+    },
+    {
+      title: "Active Clients",
+      value: dashboardData.metrics.activeClients.toString(),
+      change: "N/A",
+      changeType: "neutral",
+      icon: Users,
+    },
+  ] : [];
+
+  const quickActions = [
+    { title: "Add Client", icon: Plus, href: "/clients/new" },
+    { title: "Submit Report", icon: FileText, href: "/weekly-reports" },
+    { title: "View Analytics", icon: BarChart3, href: "/performance-analytics" },
+  ];
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="p-6 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <p className="text-gray-600">Loading dashboard...</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <div className="p-6 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-red-600 mb-4">Error: {error}</p>
+            <Button onClick={() => window.location.reload()}>
+              Try Again
+            </Button>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <div className="flex space-x-2">
-          <Button asChild>
-            <Link href="/weekly-reports/new">New Weekly Report</Link>
-          </Button>
+    <AppLayout>
+      <div className="p-6">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600 mt-2">
+              Welcome back, {user?.name || user?.email}!
+            </p>
+          </div>
+
+          {/* Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {metrics.map((metric, index) => (
+              <Card key={index}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600">
+                    {metric.title}
+                  </CardTitle>
+                  <metric.icon className="h-4 w-4 text-gray-400" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{metric.value}</div>
+                  <p className={`text-xs flex items-center ${
+                    metric.changeType === "positive" ? "text-green-600" : 
+                    metric.changeType === "negative" ? "text-red-600" : "text-gray-500"
+                  }`}>
+                    {metric.changeType !== "neutral" && (
+                      metric.changeType === "positive" ? 
+                        <TrendingUp className="h-3 w-3 mr-1" /> : 
+                        <TrendingDown className="h-3 w-3 mr-1" />
+                    )}
+                    {metric.change} from last month
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Sales Performance Chart */}
+            <div className="lg:col-span-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sales Performance</CardTitle>
+                  <CardDescription>
+                    Revenue, invoices, and cash collection trends over the last 6 months
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {dashboardData?.salesPerformance && dashboardData.salesPerformance.length > 0 ? (
+                    <Line
+                      data={{
+                        labels: dashboardData.salesPerformance.map(d => formatDate(d.date)),
+                        datasets: [
+                          {
+                            label: 'Revenue',
+                            data: dashboardData.salesPerformance.map(d => d.revenue),
+                            borderColor: 'rgb(59, 130, 246)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                          },
+                          {
+                            label: 'Invoices',
+                            data: dashboardData.salesPerformance.map(d => d.invoices),
+                            borderColor: 'rgb(16, 185, 129)',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: false,
+                          },
+                          {
+                            label: 'Cash Collected',
+                            data: dashboardData.salesPerformance.map(d => d.cashCollected),
+                            borderColor: 'rgb(245, 158, 11)',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            fill: false,
+                          },
+                        ],
+                      }}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: {
+                            position: 'top' as const,
+                          },
+                        },
+                        scales: {
+                          y: {
+                            beginAtZero: true,
+                            ticks: {
+                              callback: function(value) {
+                                return '₹' + Number(value).toLocaleString();
+                              }
+                            }
+                          }
+                        }
+                      }}
+                      height={320}
+                    />
+                  ) : (
+                    <div className="h-64 flex items-center justify-center text-gray-500">
+                      No performance data available
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Quick Actions */}
+            <div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quick Actions</CardTitle>
+                  <CardDescription>
+                    Common tasks and shortcuts
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {quickActions.map((action, index) => (
+                    <Button
+                      key={index}
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => window.location.href = action.href}
+                    >
+                      <action.icon className="mr-2 h-4 w-4" />
+                      {action.title}
+                    </Button>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* Recent Activity */}
+          {dashboardData?.recentActivity && dashboardData.recentActivity.length > 0 && (
+            <div className="mt-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Activity</CardTitle>
+                  <CardDescription>
+                    Latest weekly reports and activities
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {dashboardData.recentActivity.slice(0, 5).map((activity) => (
+                      <div key={activity.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <p className="font-medium">{activity.description}</p>
+                          <p className="text-sm text-gray-500">
+                            {activity.salesRep} • {formatDate(activity.date)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium">{formatCurrency(activity.amount)}</p>
+                          <p className="text-sm text-gray-500">{activity.type}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Sales Representatives</CardTitle>
-            <CardDescription>Based on total cash collected</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {topSalesReps.length === 0 ? (
-              <p className="text-center py-4 text-gray-500">No data available</p>
-            ) : (
-              <div className="space-y-4">
-                {topSalesReps.map((rep) => (
-                  <div key={rep.id} className="flex justify-between items-center">
-                    <Link href={`/sales-reps/${rep.id}`} className="hover:underline">
-                      {rep.name}
-                    </Link>
-                    <span className="font-medium">{formatCurrency(rep.total_cash_collected)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Products</CardTitle>
-            <CardDescription>Based on total revenue generated</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {topProducts.length === 0 ? (
-              <p className="text-center py-4 text-gray-500">No data available</p>
-            ) : (
-              <div className="space-y-4">
-                {topProducts.map((product) => (
-                  <div key={product.id} className="flex justify-between items-center">
-                    <Link href={`/products/${product.id}`} className="hover:underline">
-                      {product.name}
-                    </Link>
-                    <div className="text-right">
-                      <div className="font-medium">{formatCurrency(product.total_revenue)}</div>
-                      <div className="text-sm text-gray-500">{product.total_units_sold} units</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Lead Generators</CardTitle>
-            <CardDescription>Based on total sales credit earned</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {topLeadGenerators.length === 0 ? (
-              <p className="text-center py-4 text-gray-500">No data available</p>
-            ) : (
-              <div className="space-y-4">
-                {topLeadGenerators.map((generator) => (
-                  <div key={generator.id} className="flex justify-between items-center">
-                    <Link href={`/sales-reps/${generator.id}`} className="hover:underline">
-                      {generator.name}
-                    </Link>
-                    <div className="text-right">
-                      <div className="font-medium">{formatCurrency(generator.total_commission)}</div>
-                      <div className="text-sm text-gray-500">
-                        {generator.total_leads_converted} / {generator.total_leads_generated} leads
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Weekly Reports</CardTitle>
-            <CardDescription>Latest submitted reports</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recentWeeklyReports.length === 0 ? (
-              <p className="text-center py-4 text-gray-500">No data available</p>
-            ) : (
-              <div className="space-y-4">
-                {recentWeeklyReports.map((report) => (
-                  <div key={report.id} className="flex justify-between items-center">
-                    <div>
-                      <Link href={`/weekly-reports/${report.id}`} className="hover:underline">
-                        {new Date(report.week_starting).toLocaleDateString()}
-                      </Link>
-                      <div className="text-sm text-gray-500">{report.sales_rep_name}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-medium">{formatCurrency(report.cash_collected)}</div>
-                      <div className="text-sm text-gray-500">{formatCurrency(report.invoices_raised)} invoiced</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
-}
+    </AppLayout>
+  );
+} 

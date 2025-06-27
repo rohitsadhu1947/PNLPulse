@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless"
+import { PrismaClient } from '@prisma/client';
 
 // Create a SQL client with the Neon connection string
 export const sql = neon(
@@ -8,6 +9,14 @@ export const sql = neon(
     process.env.POSTGRES_URL_NON_POOLING ||
     "",
 )
+
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
+
+export const prisma =
+  globalForPrisma.prisma ||
+  new PrismaClient();
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 // Add a function to check database connection
 export async function checkDatabaseConnection() {

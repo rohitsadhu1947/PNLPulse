@@ -5,12 +5,55 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-IN", {
+// Enhanced currency formatting with multi-currency support
+export function formatCurrency(amount: number, currency: string = "INR"): string {
+  const locale = currency === "INR" ? "en-IN" : "en-US"
+  
+  return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: "INR",
+    currency: currency,
     maximumFractionDigits: 2,
   }).format(amount)
+}
+
+// Get currency symbol
+export function getCurrencySymbol(currency: string = "INR"): string {
+  const symbols: Record<string, string> = {
+    "INR": "₹",
+    "USD": "$",
+    "EUR": "€",
+    "GBP": "£",
+    "AED": "د.إ",
+    "SAR": "ر.س",
+  }
+  return symbols[currency] || currency
+}
+
+// Format currency for display with symbol
+export function formatCurrencyDisplay(amount: number, currency: string = "INR"): string {
+  const symbol = getCurrencySymbol(currency)
+  const locale = currency === "INR" ? "en-IN" : "en-US"
+  
+  return new Intl.NumberFormat(locale, {
+    style: "decimal",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount) + ` ${symbol}`
+}
+
+// Format currency for charts and compact display
+export function formatCurrencyCompact(amount: number, currency: string = "INR"): string {
+  const symbol = getCurrencySymbol(currency)
+  
+  if (amount >= 10000000) { // 1 crore
+    return `${(amount / 10000000).toFixed(1)}Cr ${symbol}`
+  } else if (amount >= 100000) { // 1 lakh
+    return `${(amount / 100000).toFixed(1)}L ${symbol}`
+  } else if (amount >= 1000) { // 1 thousand
+    return `${(amount / 1000).toFixed(1)}K ${symbol}`
+  } else {
+    return `${amount.toLocaleString()} ${symbol}`
+  }
 }
 
 export function getStartOfWeek(date: Date): Date {

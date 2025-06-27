@@ -1,90 +1,168 @@
-import { Button } from "@/components/ui/button"
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import Link from "next/link"
-import { SeedProducts } from "@/components/seed-products"
-import { getAllProducts } from "@/lib/db"
-import { formatCurrency } from "@/lib/utils"
-import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
+"use client";
+import { useState, useEffect } from "react";
+import AppLayout from "@/components/layout/app-layout";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Plus, Eye, Edit, Loader2, Package } from "lucide-react";
+import Link from "next/link";
 
-export const dynamic = "force-dynamic"
+interface Product {
+  id: number;
+  name: string;
+  description: string | null;
+  price: number;
+  image_url?: string | null;
+}
 
-export default async function ProductsPage() {
-  const products = await getAllProducts()
+export default function ProductsPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch('/api/products');
+      if (!response.ok) {
+        throw new Error('Failed to fetch products');
+      }
+      const data = await response.json();
+      setProducts(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="p-6 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <p className="text-gray-600">Loading products...</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <div className="p-6 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-red-600 mb-4">Error: {error}</p>
+            <Button onClick={fetchProducts}>
+              Try Again
+            </Button>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
-    <ProtectedRoute permission="products:read">
-      <div className="container mx-auto py-10">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold">Products</h1>
-          <ProtectedRoute permission="products:write">
-            <Link href="/products/new">
-              <Button>Add Product</Button>
-            </Link>
-          </ProtectedRoute>
-        </div>
-
-        {products.length === 0 ? (
-          <div className="space-y-8">
-            <div className="text-center py-12 bg-muted rounded-lg">
-              <h2 className="text-xl font-medium mb-2">No products found</h2>
-              <p className="text-muted-foreground mb-4">
-                Get started by adding your first product or seed the initial catalog
-              </p>
-              <ProtectedRoute permission="products:write">
-                <Link href="/products/new">
-                  <Button>Add Product</Button>
-                </Link>
-              </ProtectedRoute>
+    <AppLayout>
+      <div className="p-6">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 flex items-center"><Package className="mr-2 h-7 w-7" /> Products</h1>
+                <p className="text-gray-600 mt-2">
+                  Manage your product catalog
+                </p>
+              </div>
+              <Link href="/products/new">
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" /> Add Product
+                </Button>
+              </Link>
             </div>
-
-            <ProtectedRoute permission="products:write">
-              <SeedProducts />
-            </ProtectedRoute>
           </div>
-        ) : (
-          <Table>
-            <TableCaption>A list of your products.</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[200px]">Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {products.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell>{product.description || "No description"}</TableCell>
-                  <TableCell>{formatCurrency(product.price)}</TableCell>
-                  <TableCell className="text-right">
-                    <Link href={`/products/${product.id}`}>
-                      <Button variant="ghost" size="sm">
-                        View
-                      </Button>
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableCell colSpan={4}>{/* Add pagination or other footer content here */}</TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
-        )}
+
+          {/* Stats Card */}
+          <div className="mb-6">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-4">
+                  <Package className="h-8 w-8 text-blue-600" />
+                  <div>
+                    <p className="text-2xl font-bold">{products.length}</p>
+                    <p className="text-gray-600">Total Products</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Products Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Product List</CardTitle>
+              <CardDescription>
+                Showing {products.length} products
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {products.length > 0 ? (
+                      products.map((product) => (
+                        <TableRow key={product.id}>
+                          <TableCell className="font-medium">{product.name}</TableCell>
+                          <TableCell>{product.description || "-"}</TableCell>
+                          <TableCell>{product.price?.toLocaleString(undefined, { style: 'currency', currency: 'INR' })}</TableCell>
+                          <TableCell>
+                            <div className="flex space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                              >
+                                <Link href={`/products/${product.id}`}><Eye className="h-4 w-4" /></Link>
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                              >
+                                <Link href={`/products/${product.id}/edit`}><Edit className="h-4 w-4" /></Link>
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                          No products found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </ProtectedRoute>
-  )
-}
+    </AppLayout>
+  );
+} 

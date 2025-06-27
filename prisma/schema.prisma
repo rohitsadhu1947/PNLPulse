@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model audit_logs {
+  id         Int       @id @default(autoincrement())
+  user_id    Int?
+  action     String    @db.VarChar(100)
+  table_name String?   @db.VarChar(100)
+  record_id  Int?
+  old_values Json?
+  new_values Json?
+  ip_address String?   @db.Inet
+  user_agent String?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  users      users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_audit_logs_created_at")
+  @@index([table_name], map: "idx_audit_logs_table_name")
+  @@index([user_id], map: "idx_audit_logs_user_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model clients {
+  id                    Int                    @id @default(autoincrement())
+  name                  String                 @db.VarChar(255)
+  client_type           String?                @db.VarChar(50)
+  industry              String?                @db.VarChar(100)
+  website               String?                @db.VarChar(255)
+  company_size          String?                @db.VarChar(50)
+  hq_location           String?                @db.VarChar(255)
+  pan_gst_number        String?                @db.VarChar(50)
+  lead_source           String?                @db.VarChar(50)
+  account_owner_id      Int?
+  sales_stage           String?                @db.VarChar(50)
+  deal_value            Decimal?               @db.Decimal(15, 2)
+  deal_currency         String?                @default("INR") @db.VarChar(3)
+  target_close_date     DateTime?              @db.Date
+  probability_to_close  Int?
+  notes                 String?
+  products_interested   Int[]
+  pricing_model         String?                @db.VarChar(50)
+  custom_requirements   String?
+  tc_compliance_status  String?                @db.VarChar(50)
+  onboarding_status     String?                @db.VarChar(50)
+  csm_assigned          String?                @db.VarChar(100)
+  support_channels      String[]
+  renewal_date          DateTime?              @db.Date
+  created_at            DateTime?              @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime?              @default(now()) @db.Timestamptz(6)
+  sales_representatives sales_representatives? @relation(fields: [account_owner_id], references: [id], onUpdate: NoAction)
+  sales_rep_products    sales_rep_products[]
+  stakeholders          stakeholders[]
+  lead_handovers        sales_lead_generation[]
+
+  @@index([account_owner_id], map: "idx_clients_account_owner")
+}
+
+model products {
+  id                  Int                  @id @default(autoincrement())
+  name                String               @db.VarChar(255)
+  description         String?
+  price               Decimal              @db.Decimal(15, 2)
+  currency            String?              @default("INR") @db.VarChar(3)
+  created_at          DateTime?            @default(now()) @db.Timestamptz(6)
+  annual_sales_target Decimal?             @default(0) @db.Decimal
+  sales_rep_products  sales_rep_products[]
+}
+
+model roles {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique @db.VarChar(50)
+  description String?
+  permissions Json?        @default("[]")
+  created_at  DateTime?    @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime?    @default(now()) @db.Timestamptz(6)
+  user_roles  user_roles[]
+}
+
+model sales_lead_generation {
+  id                                                                              Int                    @id @default(autoincrement())
+  weekly_report_id                                                                Int?
+  generator_id                                                                    Int?
+  recipient_id                                                                    Int?
+  client_id                                                                       Int?
+  leads_generated                                                                 Int                    @default(0)
+  leads_converted                                                                 Int                    @default(0)
+  value_of_converted_leads                                                        Decimal                @default(0) @db.Decimal(15, 2)
+  value_currency                                                                  String?                @default("INR") @db.VarChar(3)
+  commission_percentage                                                           Decimal                @default(0) @db.Decimal(5, 2)
+  commission_amount                                                               Decimal                @default(0) @db.Decimal(15, 2)
+  commission_currency                                                             String?                @default("INR") @db.VarChar(3)
+  created_at                                                                      DateTime?              @default(now()) @db.Timestamptz(6)
+  updated_at                                                                      DateTime?              @default(now()) @db.Timestamptz(6)
+  sales_representatives_sales_lead_generation_generator_idTosales_representatives sales_representatives? @relation("sales_lead_generation_generator_idTosales_representatives", fields: [generator_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sales_representatives_sales_lead_generation_recipient_idTosales_representatives sales_representatives? @relation("sales_lead_generation_recipient_idTosales_representatives", fields: [recipient_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  weekly_sales_reports                                                            weekly_sales_reports?  @relation(fields: [weekly_report_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  client                                                                          clients?               @relation(fields: [client_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([generator_id], map: "idx_sales_lead_generation_generator_id")
+  @@index([recipient_id], map: "idx_sales_lead_generation_recipient_id")
+  @@index([weekly_report_id], map: "idx_sales_lead_generation_weekly_report_id")
+  @@index([client_id], map: "idx_sales_lead_generation_client_id")
+}
+
+model sales_rep_products {
+  id                    Int                   @id @default(autoincrement())
+  sales_rep_id          Int
+  product_id            Int
+  units_sold            Int                   @default(0)
+  revenue_generated     Decimal               @default(0) @db.Decimal(12, 2)
+  revenue_currency      String?               @default("INR") @db.VarChar(3)
+  sale_date             DateTime              @db.Date
+  created_at            DateTime?             @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime?             @default(now()) @db.Timestamptz(6)
+  client_id             Int
+  invoices_raised       Decimal               @default(0) @db.Decimal(15, 2)
+  invoice_currency      String?               @default("INR") @db.VarChar(3)
+  cash_collected        Decimal               @default(0) @db.Decimal(15, 2)
+  cash_currency         String?               @default("INR") @db.VarChar(3)
+  invoice_date          DateTime?             @db.Date
+  cash_collection_date  DateTime?             @db.Date
+  clients               clients               @relation(fields: [client_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  products              products              @relation(fields: [product_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sales_representatives sales_representatives @relation(fields: [sales_rep_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([sales_rep_id, product_id, sale_date])
+  @@index([product_id], map: "idx_sales_rep_products_product_id")
+  @@index([sales_rep_id], map: "idx_sales_rep_products_sales_rep_id")
+}
+
+model sales_representatives {
+  id                                                                              Int                     @id @default(autoincrement())
+  name                                                                            String                  @db.VarChar(255)
+  email                                                                           String                  @unique @db.VarChar(255)
+  phone                                                                           String?                 @db.VarChar(50)
+  hire_date                                                                       DateTime                @db.Date
+  target_amount                                                                   Decimal?                @db.Decimal(15, 2)
+  target_currency                                                                 String?                 @default("INR") @db.VarChar(3)
+  created_at                                                                      DateTime?               @default(now()) @db.Timestamptz(6)
+  clients                                                                         clients[]
+  sales_lead_generation_sales_lead_generation_generator_idTosales_representatives sales_lead_generation[] @relation("sales_lead_generation_generator_idTosales_representatives")
+  sales_lead_generation_sales_lead_generation_recipient_idTosales_representatives sales_lead_generation[] @relation("sales_lead_generation_recipient_idTosales_representatives")
+  sales_rep_products                                                              sales_rep_products[]
+  weekly_sales_reports                                                            weekly_sales_reports[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model stakeholders {
+  id                  Int       @id @default(autoincrement())
+  client_id           Int
+  name                String    @db.VarChar(255)
+  email               String?   @db.VarChar(255)
+  phone               String?   @db.VarChar(50)
+  designation         String?   @db.VarChar(100)
+  decision_role       String?   @db.VarChar(50)
+  relationship_status String?   @db.VarChar(50)
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  clients             clients   @relation(fields: [client_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([client_id], map: "idx_stakeholders_client_id")
+}
+
+model user_roles {
+  id                                  Int       @id @default(autoincrement())
+  user_id                             Int?
+  role_id                             Int?
+  assigned_at                         DateTime? @default(now()) @db.Timestamptz(6)
+  assigned_by                         Int?
+  users_user_roles_assigned_byTousers users?    @relation("user_roles_assigned_byTousers", fields: [assigned_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  roles                               roles?    @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_user_roles_user_idTousers     users?    @relation("user_roles_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, role_id])
+  @@index([role_id], map: "idx_user_roles_role_id")
+  @@index([user_id], map: "idx_user_roles_user_id")
+}
+
+model users {
+  id                                       Int          @id @default(autoincrement())
+  name                                     String       @db.VarChar(255)
+  email                                    String       @unique @db.VarChar(255)
+  password                                 String       @db.VarChar(255)
+  is_active                                Boolean?     @default(true)
+  last_login                               DateTime?    @db.Timestamptz(6)
+  created_at                               DateTime?    @default(now()) @db.Timestamptz(6)
+  updated_at                               DateTime?    @default(now()) @db.Timestamptz(6)
+  audit_logs                               audit_logs[]
+  user_roles_user_roles_assigned_byTousers user_roles[] @relation("user_roles_assigned_byTousers")
+  user_roles_user_roles_user_idTousers     user_roles[] @relation("user_roles_user_idTousers")
+
+  @@index([email], map: "idx_users_email")
+  @@index([is_active], map: "idx_users_is_active")
+}
+
+model weekly_sales_reports {
+  id                    Int                     @id @default(autoincrement())
+  sales_rep_id          Int?
+  week_starting         DateTime                @db.Date
+  new_clients_targeted  Int                     @default(0)
+  new_clients_added     Int                     @default(0)
+  value_of_new_clients  Decimal                 @default(0) @db.Decimal(15, 2)
+  value_currency        String?                 @default("INR") @db.VarChar(3)
+  invoices_raised       Decimal                 @default(0) @db.Decimal(15, 2)
+  invoice_currency      String?                 @default("INR") @db.VarChar(3)
+  cash_collected        Decimal                 @default(0) @db.Decimal(15, 2)
+  cash_currency         String?                 @default("INR") @db.VarChar(3)
+  key_wins              String?
+  blockers              String?
+  action_items          String?
+  created_at            DateTime?               @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime?               @default(now()) @db.Timestamptz(6)
+  sales_lead_generation sales_lead_generation[]
+  sales_representatives sales_representatives?  @relation(fields: [sales_rep_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([sales_rep_id], map: "idx_weekly_sales_reports_sales_rep_id")
+  @@index([week_starting], map: "idx_weekly_sales_reports_week_starting")
+}

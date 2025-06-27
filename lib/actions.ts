@@ -28,62 +28,32 @@ import {
   updateWeeklyReportProduct as dbUpdateWeeklyReportProduct,
   deleteWeeklyReportProduct as dbDeleteWeeklyReportProduct,
 } from "./db"
-import { getCurrentUser, logAction } from "./auth"
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { hasPermission, PERMISSIONS } from '@/lib/rbac';
+import { prisma } from '@/lib/db';
 
 // Sales Rep Actions
-export async function addSalesRep(formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
-
-  const name = formData.get("name") as string
-  const email = formData.get("email") as string
-  const phone = formData.get("phone") as string
-  const hire_date = formData.get("hire_date") as string
-  const target_amount = Number.parseFloat(formData.get("target_amount") as string) || null
-
-  const salesRep = await dbAddSalesRep(name, email, phone, hire_date, target_amount)
-
-  await logAction(user.id, "CREATE", "sales_representatives", salesRep.id, null, salesRep)
-
-  revalidatePath("/sales-reps")
-  redirect("/sales-reps")
-}
-
-export async function updateSalesRep(id: number, formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
-
-  const name = formData.get("name") as string
-  const email = formData.get("email") as string
-  const phone = formData.get("phone") as string
-  const hire_date = formData.get("hire_date") as string
-  const target_amount = Number.parseFloat(formData.get("target_amount") as string) || null
-  const image_url = formData.get("image_url") as string
-
-  const updatedSalesRep = await dbUpdateSalesRep(id, name, email, phone, hire_date, target_amount, image_url)
-
-  await logAction(user.id, "UPDATE", "sales_representatives", id, null, updatedSalesRep)
-
-  revalidatePath("/sales-reps")
-  revalidatePath(`/sales-reps/${id}`)
-}
-
-export async function deleteSalesRep(id: number) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
-
-  await dbDeleteSalesRep(id)
-
-  await logAction(user.id, "DELETE", "sales_representatives", id, null, null)
-
-  revalidatePath("/sales-reps")
-  redirect("/sales-reps")
-}
+// export async function addSalesRep(formData: FormData) {
+//   // const user = await getCurrentUser()
+//   // if (!user) throw new Error("Authentication required")
+//   // ... legacy code ...
+// }
+// export async function updateSalesRep(id: number, formData: FormData) {
+//   // const user = await getCurrentUser()
+//   // if (!user) throw new Error("Authentication required")
+//   // ... legacy code ...
+// }
+// export async function deleteSalesRep(id: number) {
+//   // const user = await getCurrentUser()
+//   // if (!user) throw new Error("Authentication required")
+//   // ... legacy code ...
+// }
 
 // Product Actions
 export async function addProduct(formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const name = formData.get("name") as string
   const description = formData.get("description") as string
@@ -92,15 +62,15 @@ export async function addProduct(formData: FormData) {
 
   const product = await dbAddProduct(name, description, price, image_url)
 
-  await logAction(user.id, "CREATE", "products", product.id, null, product)
+  // await logAction(user.id, "CREATE", "products", product.id, null, product)
 
   revalidatePath("/products")
   redirect("/products")
 }
 
 export async function updateProduct(id: number, formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const name = formData.get("name") as string
   const description = formData.get("description") as string
@@ -109,19 +79,19 @@ export async function updateProduct(id: number, formData: FormData) {
 
   const updatedProduct = await dbUpdateProduct(id, name, description, price, image_url)
 
-  await logAction(user.id, "UPDATE", "products", id, null, updatedProduct)
+  // await logAction(user.id, "UPDATE", "products", id, null, updatedProduct)
 
   revalidatePath("/products")
   revalidatePath(`/products/${id}`)
 }
 
 export async function deleteProduct(id: number) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   await dbDeleteProduct(id)
 
-  await logAction(user.id, "DELETE", "products", id, null, null)
+  // await logAction(user.id, "DELETE", "products", id, null, null)
 
   revalidatePath("/products")
   redirect("/products")
@@ -129,8 +99,8 @@ export async function deleteProduct(id: number) {
 
 // Weekly Sales Report Actions
 export async function addWeeklySalesReport(formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const sales_rep_id = Number.parseInt(formData.get("sales_rep_id") as string)
   const week_starting = formData.get("week_starting") as string
@@ -156,15 +126,15 @@ export async function addWeeklySalesReport(formData: FormData) {
     action_items,
   )
 
-  await logAction(user.id, "CREATE", "weekly_sales_reports", report.id, null, report)
+  // await logAction(user.id, "CREATE", "weekly_sales_reports", report.id, null, report)
 
   revalidatePath("/weekly-reports")
   redirect("/weekly-reports")
 }
 
 export async function updateWeeklySalesReport(id: number, formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const new_clients_targeted = Number.parseInt(formData.get("new_clients_targeted") as string)
   const new_clients_added = Number.parseInt(formData.get("new_clients_added") as string)
@@ -187,19 +157,19 @@ export async function updateWeeklySalesReport(id: number, formData: FormData) {
     action_items,
   )
 
-  await logAction(user.id, "UPDATE", "weekly_sales_reports", id, null, updatedReport)
+  // await logAction(user.id, "UPDATE", "weekly_sales_reports", id, null, updatedReport)
 
   revalidatePath("/weekly-reports")
   revalidatePath(`/weekly-reports/${id}`)
 }
 
 export async function deleteWeeklySalesReport(id: number) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   await dbDeleteWeeklySalesReport(id)
 
-  await logAction(user.id, "DELETE", "weekly_sales_reports", id, null, null)
+  // await logAction(user.id, "DELETE", "weekly_sales_reports", id, null, null)
 
   revalidatePath("/weekly-reports")
   redirect("/weekly-reports")
@@ -207,8 +177,8 @@ export async function deleteWeeklySalesReport(id: number) {
 
 // Client Actions
 export async function addClient(formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const name = formData.get("name") as string
   const email = formData.get("email") as string
@@ -219,15 +189,15 @@ export async function addClient(formData: FormData) {
 
   const client = await dbAddClient(name, email, phone, company, address, sales_rep_id)
 
-  await logAction(user.id, "CREATE", "clients", client.id, null, client)
+  // await logAction(user.id, "CREATE", "clients", client.id, null, client)
 
   revalidatePath("/clients")
   redirect("/clients")
 }
 
 export async function updateClient(id: number, formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const name = formData.get("name") as string
   const email = formData.get("email") as string
@@ -238,19 +208,19 @@ export async function updateClient(id: number, formData: FormData) {
 
   const updatedClient = await dbUpdateClient(id, name, email, phone, company, address, sales_rep_id)
 
-  await logAction(user.id, "UPDATE", "clients", id, null, updatedClient)
+  // await logAction(user.id, "UPDATE", "clients", id, null, updatedClient)
 
   revalidatePath("/clients")
   revalidatePath(`/clients/${id}`)
 }
 
 export async function deleteClient(id: number) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   await dbDeleteClient(id)
 
-  await logAction(user.id, "DELETE", "clients", id, null, null)
+  // await logAction(user.id, "DELETE", "clients", id, null, null)
 
   revalidatePath("/clients")
   redirect("/clients")
@@ -258,8 +228,8 @@ export async function deleteClient(id: number) {
 
 // Stakeholder Actions
 export async function addStakeholder(formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const client_id = Number.parseInt(formData.get("client_id") as string)
   const name = formData.get("name") as string
@@ -269,41 +239,41 @@ export async function addStakeholder(formData: FormData) {
 
   const stakeholder = await dbAddStakeholder(client_id, name, email, phone, role)
 
-  await logAction(user.id, "CREATE", "stakeholders", stakeholder.id, null, stakeholder)
+  // await logAction(user.id, "CREATE", "stakeholders", stakeholder.id, null, stakeholder)
 
   revalidatePath(`/clients/${client_id}`)
 }
 
 export async function deleteStakeholder(id: number, client_id: number) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   await dbDeleteStakeholder(id)
 
-  await logAction(user.id, "DELETE", "stakeholders", id, null, null)
+  // await logAction(user.id, "DELETE", "stakeholders", id, null, null)
 
   revalidatePath(`/clients/${client_id}`)
 }
 
 // Sales Rep Product Actions
 export async function addSalesRepProduct(formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const sales_rep_id = Number.parseInt(formData.get("sales_rep_id") as string)
   const product_id = Number.parseInt(formData.get("product_id") as string)
 
   const salesRepProduct = await dbAddSalesRepProduct(sales_rep_id, product_id)
 
-  await logAction(user.id, "CREATE", "sales_rep_products", salesRepProduct.id, null, salesRepProduct)
+  // await logAction(user.id, "CREATE", "sales_rep_products", salesRepProduct.id, null, salesRepProduct)
 
   revalidatePath(`/sales-reps/${sales_rep_id}`)
 }
 
 // Lead Generation Actions
 export async function addLeadGenerationData(formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const sales_rep_id = Number.parseInt(formData.get("sales_rep_id") as string)
   const month = formData.get("month") as string
@@ -312,40 +282,40 @@ export async function addLeadGenerationData(formData: FormData) {
 
   const leadData = await dbAddLeadGenerationData(sales_rep_id, month, leads_generated, leads_converted)
 
-  await logAction(user.id, "CREATE", "lead_generation", leadData.id, null, leadData)
+  // await logAction(user.id, "CREATE", "lead_generation", leadData.id, null, leadData)
 
   revalidatePath("/dashboard")
 }
 
 export async function updateLeadGenerationData(id: number, formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const leads_generated = Number.parseInt(formData.get("leads_generated") as string)
   const leads_converted = Number.parseInt(formData.get("leads_converted") as string)
 
   const updatedLeadData = await dbUpdateLeadGenerationData(id, leads_generated, leads_converted)
 
-  await logAction(user.id, "UPDATE", "lead_generation", id, null, updatedLeadData)
+  // await logAction(user.id, "UPDATE", "lead_generation", id, null, updatedLeadData)
 
   revalidatePath("/dashboard")
 }
 
 export async function deleteLeadGenerationData(id: number) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   await dbDeleteLeadGenerationData(id)
 
-  await logAction(user.id, "DELETE", "lead_generation", id, null, null)
+  // await logAction(user.id, "DELETE", "lead_generation", id, null, null)
 
   revalidatePath("/dashboard")
 }
 
 // File Actions
 export async function addFileRecord(formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const entity_type = formData.get("entity_type") as string
   const entity_id = Number.parseInt(formData.get("entity_id") as string)
@@ -355,39 +325,39 @@ export async function addFileRecord(formData: FormData) {
 
   const fileRecord = await dbAddFileRecord(entity_type, entity_id, file_name, file_url, file_size)
 
-  await logAction(user.id, "CREATE", "files", fileRecord.id, null, fileRecord)
+  // await logAction(user.id, "CREATE", "files", fileRecord.id, null, fileRecord)
 
   revalidatePath(`/${entity_type}/${entity_id}`)
 }
 
 export async function updateFileRecord(id: number, formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const file_name = formData.get("file_name") as string
 
   const updatedFileRecord = await dbUpdateFileRecord(id, file_name)
 
-  await logAction(user.id, "UPDATE", "files", id, null, updatedFileRecord)
+  // await logAction(user.id, "UPDATE", "files", id, null, updatedFileRecord)
 
   revalidatePath("/")
 }
 
 export async function deleteFileRecord(id: number, entity_type: string, entity_id: number) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   await dbDeleteFileRecord(id)
 
-  await logAction(user.id, "DELETE", "files", id, null, null)
+  // await logAction(user.id, "DELETE", "files", id, null, null)
 
   revalidatePath(`/${entity_type}/${entity_id}`)
 }
 
 // Weekly Report Product Actions
 export async function addWeeklyReportProductAction(formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const report_id = Number.parseInt(formData.get("report_id") as string)
   const product_id = Number.parseInt(formData.get("product_id") as string)
@@ -396,32 +366,94 @@ export async function addWeeklyReportProductAction(formData: FormData) {
 
   const reportProduct = await dbAddWeeklyReportProduct(report_id, product_id, quantity_sold, revenue)
 
-  await logAction(user.id, "CREATE", "weekly_report_products", reportProduct.id, null, reportProduct)
+  // await logAction(user.id, "CREATE", "weekly_report_products", reportProduct.id, null, reportProduct)
 
   revalidatePath(`/weekly-reports/${report_id}`)
 }
 
 export async function updateWeeklyReportProductAction(id: number, formData: FormData) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   const quantity_sold = Number.parseInt(formData.get("quantity_sold") as string)
   const revenue = Number.parseFloat(formData.get("revenue") as string)
 
   const updatedReportProduct = await dbUpdateWeeklyReportProduct(id, quantity_sold, revenue)
 
-  await logAction(user.id, "UPDATE", "weekly_report_products", id, null, updatedReportProduct)
+  // await logAction(user.id, "UPDATE", "weekly_report_products", id, null, updatedReportProduct)
 
   revalidatePath("/weekly-reports")
 }
 
 export async function deleteWeeklyReportProductAction(id: number, report_id: number) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error("Authentication required")
+  // const user = await getCurrentUser()
+  // if (!user) throw new Error("Authentication required")
 
   await dbDeleteWeeklyReportProduct(id)
 
-  await logAction(user.id, "DELETE", "weekly_report_products", id, null, null)
+  // await logAction(user.id, "DELETE", "weekly_report_products", id, null, null)
 
   revalidatePath(`/weekly-reports/${report_id}`)
+}
+
+export async function onboardSalesRep({ name, email, password, phone, hire_date, target_amount }: {
+  name: string;
+  email: string;
+  password: string;
+  phone: string;
+  hire_date: string;
+  target_amount?: string;
+}) {
+  // Get session and check permission
+  const session = await getServerSession(authOptions);
+  const user = session?.user as any;
+  const rbacUser = user ? { id: user.id ?? '', roles: user.roles, permissions: user.permissions } : undefined;
+  if (!hasPermission(rbacUser, PERMISSIONS.SALES_REPS_CREATE)) {
+    throw new Error('Forbidden');
+  }
+  // Validate required fields
+  if (!name || !email || !password || !phone || !hire_date) {
+    throw new Error('name, email, password, phone, and hire_date are required');
+  }
+  // Create user
+  let newUser;
+  try {
+    newUser = await prisma.users.create({
+      data: { name, email, password },
+    });
+  } catch (err: any) {
+    if (err.code === 'P2002') {
+      throw new Error('Email already exists');
+    }
+    throw new Error(err.message || 'Error creating user');
+  }
+  // Assign sales_rep role
+  let salesRepRole = await prisma.roles.findUnique({ where: { name: 'sales_rep' } });
+  if (!salesRepRole) throw new Error('sales_rep role not found');
+  await prisma.user_roles.create({
+    data: { user_id: newUser.id, role_id: salesRepRole.id },
+  });
+  // Create sales representative record
+  let salesRep;
+  try {
+    salesRep = await prisma.sales_representatives.create({
+      data: {
+        name: newUser.name,
+        email: newUser.email,
+        phone,
+        hire_date: new Date(hire_date),
+        target_amount: target_amount ? parseFloat(target_amount) : null,
+      },
+    });
+  } catch (err: any) {
+    throw new Error(err.message || 'Error creating sales_representatives record');
+  }
+  return {
+    success: true,
+    user: newUser,
+    salesRep: {
+      ...salesRep,
+      target_amount: salesRep.target_amount ? Number(salesRep.target_amount) : null,
+    },
+  };
 }

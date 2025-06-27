@@ -1,156 +1,148 @@
-import { getProductById, getFilesByEntity, sql } from "@/lib/db"
-import { formatCurrency } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { notFound } from "next/navigation"
-import { DeleteProductButton } from "@/components/delete-product-button"
-import Image from "next/image"
-import { FileUploader } from "@/components/file-uploader"
-import { FileList } from "@/components/file-list"
+"use client";
+import { useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation";
+import AppLayout from "@/components/layout/app-layout";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Edit, Loader2, Package, Image as ImageIcon, DollarSign } from "lucide-react";
 
-export default async function ProductDetailPage({
-  params,
-}: {
-  params: { id: string }
-}) {
-  const productId = Number.parseInt(params.id)
-
-  if (isNaN(productId)) {
-    notFound()
-  }
-
-  try {
-    // Fetch the product
-    const product = await getProductById(productId)
-
-    if (!product) {
-      notFound()
-    }
-
-    // Check if the files table exists before trying to query it
-    let files = []
-    let tableExists = false
-    try {
-      const tableExistsResult = await sql`
-        SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_schema = 'public' AND table_name = 'files'
-        ) as exists
-      `
-
-      tableExists = tableExistsResult[0]?.exists
-
-      if (tableExists) {
-        files = await getFilesByEntity("product", productId)
-      }
-    } catch (error) {
-      console.error("Error checking for files table:", error)
-      // Continue without files data
-    }
-
-    return (
-      <div className="container mx-auto py-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Product Details</h1>
-          <Link href="/products">
-            <Button variant="outline">Back to Products</Button>
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <h2 className="text-2xl font-semibold mb-4">{product.name}</h2>
-
-              {product.image_url && (
-                <div className="relative w-full h-64 mb-4 rounded-md overflow-hidden">
-                  <Image
-                    src={product.image_url || "/placeholder.svg"}
-                    alt={product.name}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Description</h3>
-                  <p className="mt-1">{product.description || "No description provided"}</p>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Price</h3>
-                  <p className="mt-1 text-xl font-semibold">{formatCurrency(product.price)}</p>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Created At</h3>
-                  <p className="mt-1">{new Date(product.created_at).toLocaleDateString()}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <Link href={`/products/${product.id}/edit`} className="flex-1">
-                <Button className="w-full">Edit Product</Button>
-              </Link>
-              <DeleteProductButton productId={product.id} className="flex-1" />
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h2 className="text-xl font-semibold mb-4">Sales Performance</h2>
-            <p className="text-muted-foreground">Sales performance data will be displayed here.</p>
-            {/* Add sales performance charts and data here */}
-          </div>
-        </div>
-
-        {tableExists && (
-          <div className="mt-8">
-            <h2 className="text-2xl font-bold mb-4">Product Documents</h2>
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <div className="mb-6">
-                <FileUploader
-                  entityType="product"
-                  entityId={productId}
-                  uploadedBy={null} // In a real app, this would be the current user's ID
-                />
-              </div>
-
-              <div className="mt-8">
-                <h3 className="text-lg font-semibold mb-4">Uploaded Files</h3>
-                <FileList files={files} entityType="product" entityId={productId} />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  } catch (error) {
-    console.error("Error in ProductDetailPage:", error)
-    return (
-      <div className="container mx-auto py-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Product Details</h1>
-          <Link href="/products">
-            <Button variant="outline">Back to Products</Button>
-          </Link>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow-sm border mb-6 text-center">
-          <h2 className="text-xl font-medium text-red-600 mb-4">Error Loading Product</h2>
-          <p className="mb-4">
-            There was an error loading this product. This might be due to missing data or database issues.
-          </p>
-          <pre className="bg-gray-100 p-4 rounded text-left text-xs overflow-auto max-h-40 mb-4">
-            {error instanceof Error ? error.message : String(error)}
-          </pre>
-          <Link href="/products">
-            <Button>Return to Products</Button>
-          </Link>
-        </div>
-      </div>
-    )
-  }
+interface Product {
+  id: number;
+  name: string;
+  description: string | null;
+  price: number;
+  image_url?: string | null;
 }
+
+export default function ProductDetailsPage({ params }: { params: { id: string } }) {
+  const router = useRouter();
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchProduct();
+  }, [params.id]);
+
+  const fetchProduct = async () => {
+    try {
+      const response = await fetch(`/api/products/${params.id}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch product');
+      }
+      const data = await response.json();
+      setProduct(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="p-6 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <p className="text-gray-600">Loading product details...</p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <AppLayout>
+        <div className="p-6 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-red-600 mb-4">Error: {error || 'Product not found'}</p>
+            <Button onClick={() => router.push('/products')}>
+              Back to Products
+            </Button>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  return (
+    <AppLayout>
+      <div className="p-6">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <Button
+              variant="ghost"
+              onClick={() => router.push('/products')}
+              className="mb-4"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Products
+            </Button>
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center"><Package className="mr-2 h-7 w-7" /> {product.name}</h1>
+            <p className="text-gray-600 mt-2">
+              Product ID: {product.id}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Main Product Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <ImageIcon className="mr-2 h-5 w-5" />
+                  Product Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <span className="font-medium text-gray-500">Name:</span> {product.name}
+                </div>
+                <div>
+                  <span className="font-medium text-gray-500">Description:</span> {product.description || "-"}
+                </div>
+                <div>
+                  <span className="font-medium text-gray-500">Price:</span> {product.price?.toLocaleString(undefined, { style: 'currency', currency: 'INR' })}
+                </div>
+                <div>
+                  <span className="font-medium text-gray-500">Image URL:</span> {product.image_url ? (
+                    <a href={product.image_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{product.image_url}</a>
+                  ) : "-"}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Quick Actions */}
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quick Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => router.push(`/products/${product.id}/edit`)}
+                  >
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit Product
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => router.push('/products')}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back to List
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </div>
+    </AppLayout>
+  );
+} 
