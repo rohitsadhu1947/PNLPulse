@@ -32,7 +32,12 @@ export async function GET(request: NextRequest) {
     hasPermission: hasPermission(rbacUser, PERMISSIONS.SALES_REPS_VIEW)
   });
   
-  if (!hasPermission(rbacUser, PERMISSIONS.SALES_REPS_VIEW)) {
+  // Allow access if user has the permission OR if they are a sales rep (for viewing their own profile)
+  const hasViewPermission = hasPermission(rbacUser, PERMISSIONS.SALES_REPS_VIEW) || 
+                           hasPermission(rbacUser, 'sales_reps:read') ||
+                           rbacUser?.roles?.includes('sales_rep');
+  
+  if (!hasViewPermission) {
     return NextResponse.json({ error: 'Forbidden', debug: { session, user, rbacUser } }, { status: 403 });
   }
 

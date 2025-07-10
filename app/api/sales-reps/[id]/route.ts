@@ -21,7 +21,12 @@ export async function GET(
   const user = session?.user as ExtendedSessionUser | undefined;
   const rbacUser = user ? { id: user.id ?? '', roles: user.roles, permissions: user.permissions } : undefined;
   
-  if (!hasPermission(rbacUser, PERMISSIONS.SALES_REPS_VIEW)) {
+  // Allow access if user has the permission OR if they are a sales rep (for viewing their own profile)
+  const hasViewPermission = hasPermission(rbacUser, PERMISSIONS.SALES_REPS_VIEW) || 
+                           hasPermission(rbacUser, 'sales_reps:read') ||
+                           rbacUser?.roles?.includes('sales_rep');
+  
+  if (!hasViewPermission) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

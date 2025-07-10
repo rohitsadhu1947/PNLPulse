@@ -51,7 +51,12 @@ export async function GET(request: NextRequest) {
   const user = session?.user as ExtendedSessionUser | undefined;
   const rbacUser = user ? { id: user.id ?? '', roles: user.roles, permissions: user.permissions } : undefined;
   
-  if (!hasPermission(rbacUser, PERMISSIONS.SALES_VIEW)) {
+  // Allow access if user has the permission OR if they are a sales rep
+  const hasViewPermission = hasPermission(rbacUser, PERMISSIONS.SALES_VIEW) || 
+                           hasPermission(rbacUser, 'sales:read') ||
+                           rbacUser?.roles?.includes('sales_rep');
+  
+  if (!hasViewPermission) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -113,7 +118,12 @@ export async function POST(request: NextRequest) {
   const user = session?.user as ExtendedSessionUser | undefined;
   const rbacUser = user ? { id: user.id ?? '', roles: user.roles, permissions: user.permissions } : undefined;
   
-  if (!hasPermission(rbacUser, PERMISSIONS.SALES_CREATE)) {
+  // Allow access if user has the permission OR if they are a sales rep
+  const hasCreatePermission = hasPermission(rbacUser, PERMISSIONS.SALES_CREATE) || 
+                             hasPermission(rbacUser, 'sales:write') ||
+                             rbacUser?.roles?.includes('sales_rep');
+  
+  if (!hasCreatePermission) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
