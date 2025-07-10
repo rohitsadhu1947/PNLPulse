@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import { prisma } from '@/lib/db';
+import { hasPermission, PERMISSIONS } from '@/lib/rbac';
 
 // GET /api/products/[id] - Get single product
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -28,6 +29,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const user = session.user as any;
+    const rbacUser = user ? { id: user.id ?? '', roles: user.roles, permissions: user.permissions } : undefined;
+    if (!hasPermission(rbacUser, PERMISSIONS.PRODUCTS_EDIT)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const body = await request.json();
     if (!body.name || typeof body.name !== 'string' || !body.name.trim()) {
@@ -78,6 +84,11 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const session = await getServerSession(authOptions);
     if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const user = session.user as any;
+    const rbacUser = user ? { id: user.id ?? '', roles: user.roles, permissions: user.permissions } : undefined;
+    if (!hasPermission(rbacUser, PERMISSIONS.PRODUCTS_DELETE)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     await prisma.products.delete({
       where: { id: parseInt(params.id) },

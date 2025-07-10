@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../auth/[...nextauth]/route';
 import { getAllProducts, addProduct as dbAddProduct } from '@/lib/db';
 import { prisma } from '@/lib/db';
+import { hasPermission, PERMISSIONS } from '@/lib/rbac';
 
 // GET /api/products - List all products
 export async function GET(request: NextRequest) {
@@ -23,8 +24,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user || !session.user.id) {
+    if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const user = session.user as any;
+    const rbacUser = user ? { id: user.id ?? '', roles: user.roles, permissions: user.permissions } : undefined;
+    if (!hasPermission(rbacUser, PERMISSIONS.PRODUCTS_CREATE)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const body = await request.json();
     if (!body.name || typeof body.name !== 'string' || !body.name.trim()) {

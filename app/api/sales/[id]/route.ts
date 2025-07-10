@@ -37,7 +37,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   const session = await getServerSession(authOptions);
   const user = session?.user as ExtendedSessionUser | undefined;
   const rbacUser = user ? { id: user.id ?? '', roles: user.roles, permissions: user.permissions } : undefined;
-  if (!hasPermission(rbacUser, PERMISSIONS.SALES_REPS_EDIT)) {
+  if (!hasPermission(rbacUser, PERMISSIONS.SALES_EDIT)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const id = parseInt(params.id);
@@ -69,7 +69,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   const session = await getServerSession(authOptions);
   const user = session?.user as ExtendedSessionUser | undefined;
   const rbacUser = user ? { id: user.id ?? '', roles: user.roles, permissions: user.permissions } : undefined;
-  if (!hasPermission(rbacUser, PERMISSIONS.SALES_REPS_DELETE)) {
+  if (!hasPermission(rbacUser, PERMISSIONS.SALES_DELETE)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const id = parseInt(params.id);

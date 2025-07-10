@@ -64,6 +64,24 @@ export async function PUT(
       return NextResponse.json({ error: 'Invalid sales rep ID' }, { status: 400 });
     }
 
+    // Check if user is a sales rep trying to edit another sales rep
+    if (user?.roles?.includes('sales_rep')) {
+      const currentUser = await prisma.users.findUnique({
+        where: { id: parseInt(user.id || '0') }
+      });
+      
+      if (currentUser) {
+        const currentSalesRep = await prisma.sales_representatives.findFirst({
+          where: { email: currentUser.email }
+        });
+        
+        // Sales rep can only edit their own profile
+        if (!currentSalesRep || currentSalesRep.id !== salesRepId) {
+          return NextResponse.json({ error: 'You can only edit your own profile' }, { status: 403 });
+        }
+      }
+    }
+
     const body = await request.json();
     const { name, email, phone, hire_date, target_amount } = body;
 

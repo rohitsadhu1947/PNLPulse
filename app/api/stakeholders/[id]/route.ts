@@ -106,6 +106,47 @@ export async function PUT(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
+    // Check if user is a sales rep trying to edit a stakeholder of a client they're not assigned to
+    const isSalesRep = user?.user_roles_user_roles_user_idTousers.some(
+      (userRole: any) => userRole.roles.name === 'sales_rep'
+    );
+
+    if (isSalesRep) {
+      const stakeholderId = parseInt(params.id);
+      const stakeholder = await prisma.stakeholders.findUnique({
+        where: { id: stakeholderId },
+        include: {
+          clients: {
+            include: {
+              sales_representatives: true
+            }
+          }
+        }
+      });
+
+      if (stakeholder && stakeholder.clients) {
+        const currentUser = await prisma.users.findUnique({
+          where: { id: userId }
+        });
+
+        if (currentUser) {
+          const currentSalesRep = await prisma.sales_representatives.findFirst({
+            where: { email: currentUser.email }
+          });
+
+          if (currentSalesRep && stakeholder.clients.sales_representatives && Array.isArray(stakeholder.clients.sales_representatives)) {
+            const isAssignedToClient = stakeholder.clients.sales_representatives.some(
+              (sr: any) => sr.id === currentSalesRep.id
+            );
+
+            if (!isAssignedToClient) {
+              return NextResponse.json({ error: 'You can only edit stakeholders of clients assigned to you' }, { status: 403 });
+            }
+          }
+        }
+      }
+    }
+
     // Get current stakeholder data for audit log
     const currentStakeholder = await prisma.stakeholders.findUnique({
       where: { id: parseInt(params.id) }

@@ -125,6 +125,44 @@ export async function PUT(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
+    // Check if user is a sales rep trying to edit a client they're not assigned to
+    const isSalesRep = user?.user_roles_user_roles_user_idTousers.some(
+      (userRole: any) => userRole.roles.name === 'sales_rep'
+    );
+
+    if (isSalesRep) {
+      const clientId = parseInt(params.id);
+      const client = await prisma.clients.findUnique({
+        where: { id: clientId },
+        include: {
+          sales_representatives: true
+        }
+      });
+
+      if (client && client.sales_representatives && Array.isArray(client.sales_representatives) && client.sales_representatives.length > 0) {
+        // Check if the current user is assigned to this client
+        const currentUser = await prisma.users.findUnique({
+          where: { id: userId }
+        });
+
+        if (currentUser) {
+          const currentSalesRep = await prisma.sales_representatives.findFirst({
+            where: { email: currentUser.email }
+          });
+
+          if (currentSalesRep) {
+            const isAssignedToClient = client.sales_representatives.some(
+              (sr: any) => sr.id === currentSalesRep.id
+            );
+
+            if (!isAssignedToClient) {
+              return NextResponse.json({ error: 'You can only edit clients assigned to you' }, { status: 403 });
+            }
+          }
+        }
+      }
+    }
+
     // Get current client data for audit log
     const currentClient = await prisma.clients.findUnique({
       where: { id: parseInt(params.id) }
