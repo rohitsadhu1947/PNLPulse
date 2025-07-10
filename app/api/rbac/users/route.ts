@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import { hasRole } from '@/lib/rbac';
 import { prisma } from '@/lib/db';
+import bcrypt from "bcryptjs";
 
 export async function GET(request: NextRequest) {
   try {
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'User with this email already exists' }, { status: 400 });
       }
       // Hash password (simple hash for now, replace with bcrypt in production)
-      const hashedPassword = body.password; // TODO: use bcrypt.hashSync(body.password, 10)
+      const hashedPassword = bcrypt.hashSync(body.password, 10);
       const newUser = await prisma.users.create({
         data: {
           name: body.name,
