@@ -44,6 +44,9 @@ export default function ClientsPage() {
     endpoint: '/api/clients'
   });
 
+  const user = session?.user as any;
+  const canEditClient = user?.permissions?.includes('clients:edit') || user?.roles?.includes('admin') || user?.roles?.includes('sales_manager');
+
   const formatCurrency = (amount: number | null) => {
     if (!amount) return "N/A";
     return new Intl.NumberFormat("en-IN", {
@@ -251,13 +254,15 @@ export default function ClientsPage() {
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => window.location.href = `/clients/${client.id}/edit`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
+                              {canEditClient && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.location.href = `/clients/${client.id}/edit`}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

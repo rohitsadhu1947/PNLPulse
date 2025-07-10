@@ -120,6 +120,9 @@ export default function SalesPage() {
   const userSalesRepId = (session?.user as any)?.sales_rep_id;
   const userSalesRepName = salesReps.find(rep => rep.id === userSalesRepId)?.name || session?.user?.name || '';
 
+  const user = session?.user as any;
+  const canEditSale = user?.permissions?.includes('sales:edit') || user?.roles?.includes('admin') || user?.roles?.includes('sales_manager');
+
   // Auto-set sales_rep_id for sales reps when dialog opens
   useEffect(() => {
     if (isCreateDialogOpen && isSalesRep && userSalesRepId) {
@@ -523,12 +526,22 @@ export default function SalesPage() {
                           <TableCell>{formatCurrency(sale.cash_collected)}</TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
-                              <Button variant="outline" size="sm" asChild>
-                                <a href={`/sales/${sale.id}`}><Eye className="h-4 w-4" /></a>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.location.href = `/sales/${sale.id}`}
+                              >
+                                <Eye className="h-4 w-4" />
                               </Button>
-                              <Button variant="outline" size="sm" asChild>
-                                <a href={`/sales/${sale.id}/edit`}><Edit className="h-4 w-4" /></a>
-                              </Button>
+                              {canEditSale && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.location.href = `/sales/${sale.id}/edit`}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

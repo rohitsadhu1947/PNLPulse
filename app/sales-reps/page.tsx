@@ -82,6 +82,9 @@ export default function SalesRepsPage() {
            (salesRep.phone && salesRep.phone.includes(searchTerm));
   });
 
+  const user = session?.user as any;
+  const canEditSalesRep = user?.permissions?.includes('sales_reps:edit') || user?.roles?.includes('admin') || user?.roles?.includes('sales_manager');
+
   if (loading) {
     return (
       <AppLayout>
@@ -227,13 +230,15 @@ export default function SalesRepsPage() {
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => window.location.href = `/sales-reps/${salesRep.id}/edit`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
+                              {canEditSalesRep && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.location.href = `/sales-reps/${salesRep.id}/edit`}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

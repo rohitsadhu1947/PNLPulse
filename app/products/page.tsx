@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Eye, Edit, Loader2, Package } from "lucide-react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 
 interface Product {
   id: number;
@@ -19,6 +20,10 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const { data: session } = useSession();
+  const user = session?.user as any;
+  const canEditProduct = user?.permissions?.includes('products:edit') || user?.roles?.includes('admin') || user?.roles?.includes('sales_manager');
 
   useEffect(() => {
     fetchProducts();
@@ -138,13 +143,15 @@ export default function ProductsPage() {
                               >
                                 <Link href={`/products/${product.id}`}><Eye className="h-4 w-4" /></Link>
                               </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                asChild
-                              >
-                                <Link href={`/products/${product.id}/edit`}><Edit className="h-4 w-4" /></Link>
-                              </Button>
+                              {canEditProduct && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  asChild
+                                >
+                                  <Link href={`/products/${product.id}/edit`}><Edit className="h-4 w-4" /></Link>
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
